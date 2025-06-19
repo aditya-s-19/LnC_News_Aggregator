@@ -1,0 +1,110 @@
+  generator client {
+    provider = "prisma-client-js"
+  }
+
+  datasource db {
+    provider = "postgresql"
+    url      = env("DATABASE_URL")
+  }
+
+  model User {
+    id           Int                    @id @default(autoincrement())
+    username     String
+    email        String                 @unique
+    passwordHash String
+    role         String                 @default("user")
+    savedArticles UserSavedArticle[]
+    articleReactions UserArticleReaction[]
+    subscribedCategories UserSubscribedCategory[]
+    subscribedKeywords UserSubscribedKeyword[]
+    notifications UserNotification[]
+  }
+
+  model Category {
+    id        Int       @id @default(autoincrement())
+    name      String    @unique
+    articles  Article[]
+    userSubscribedCategories UserSubscribedCategory[]
+    userSubscribedKeywords UserSubscribedKeyword[]
+  }
+
+  model Article {
+    id           Int                  @id @default(autoincrement())
+    headline     String
+    description  String
+    source       String
+    url          String               @unique
+    published_at DateTime
+    created_at   DateTime             @default(now())
+    like_count   Int                  @default(0)
+    dislike_count Int                 @default(0)
+    category     Category?            @relation(fields: [category_id], references: [id])
+    category_id  Int?
+    savedBy      UserSavedArticle[]
+    reactions    UserArticleReaction[]
+  }
+
+  model UserSavedArticle {
+    id        Int     @id @default(autoincrement())
+    user      User    @relation(fields: [user_id], references: [id])
+    user_id   Int
+    article   Article @relation(fields: [article_id], references: [id])
+    article_id Int
+
+    @@unique([user_id, article_id])
+  }
+
+  model Reaction {
+    id   Int    @id @default(autoincrement())
+    name String @unique
+    userArticleReactions UserArticleReaction[]
+  }
+
+  model UserArticleReaction {
+    id          Int       @id @default(autoincrement())
+    user        User      @relation(fields: [user_id], references: [id])
+    user_id     Int
+    article     Article   @relation(fields: [article_id], references: [id])
+    article_id  Int
+    reaction    Reaction  @relation(fields: [reaction_id], references: [id])
+    reaction_id Int
+
+    @@unique([user_id, article_id, reaction_id])
+  }
+
+  model UserSubscribedCategory {
+    id        Int      @id @default(autoincrement())
+    user      User     @relation(fields: [user_id], references: [id])
+    user_id   Int
+    category  Category @relation(fields: [category_id], references: [id])
+    category_id Int
+
+    @@unique([user_id, category_id])
+  }
+
+  model UserSubscribedKeyword {
+    id        Int      @id @default(autoincrement())
+    user      User     @relation(fields: [user_id], references: [id])
+    user_id   Int
+    category  Category @relation(fields: [category_id], references: [id])
+    category_id Int
+    keyword   String
+
+    @@unique([user_id, category_id, keyword])
+  }
+
+  model UserNotification {
+    id                      Int      @id @default(autoincrement())
+    user                    User     @relation(fields: [user_id], references: [id])
+    user_id                 Int
+    last_notifications_viewed_at DateTime
+  }
+
+  model NewsSource {
+    id            Int      @id @default(autoincrement())
+    name          String
+    status        String
+    last_accessed DateTime
+    api_key       String
+  }
+
