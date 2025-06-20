@@ -32,7 +32,7 @@ export class NewsApiAdapter implements NewsAdapter {
 
   constructor(private prisma: PrismaService) {}
 
-  async fetchArticles(from: Date, to: Date): Promise<NewsArticle[]> {
+  public async fetchArticles(from: Date, to: Date): Promise<NewsArticle[]> {
     const newsSource = await this.prisma.newsSource.findFirst({
       where: { name: 'NewsAPI' },
     });

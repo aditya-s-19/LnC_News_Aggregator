@@ -6,6 +6,9 @@ import { JwtModule } from '@nestjs/jwt';
 import { PassportModule } from '@nestjs/passport';
 import * as dotenv from 'dotenv';
 import { JwtStrategy } from 'src/strategies/jwt.strategy';
+import { UserModule } from 'src/user/user.module';
+import { AuthValidator } from './auth.validator';
+import { PrismaModule } from 'src/prisma/prisma.module';
 dotenv.config();
 
 const jwtSecret = process.env.JWT_SECRET_KEY;
@@ -20,8 +23,10 @@ if (!jwtSecret) {
       secret: jwtSecret,
       signOptions: { expiresIn: '1h' },
     }),
+    UserModule,
+    PrismaModule,
   ],
-  providers: [AuthService, UserService, JwtStrategy],
+  providers: [AuthService, JwtStrategy, AuthValidator],
   controllers: [AuthController],
 })
 export class AuthModule {}

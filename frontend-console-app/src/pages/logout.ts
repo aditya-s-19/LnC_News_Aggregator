@@ -1,7 +1,9 @@
+import { AppStateService } from "../services/app-state.service";
+import { mainMenuPage } from "./main-menu";
+
 export async function logout(): Promise<void> {
-  token = null;
-  role = null;
-  name = null;
+  const appState = AppStateService.getInstance();
+  appState?.resetUser();
   console.log("✅ Logged out");
-  await mainMenu();
+  await mainMenuPage();
 }

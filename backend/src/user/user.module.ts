@@ -5,4 +5,4 @@ import { UserService } from 'src/user/user.service';
   providers: [UserService],
   exports: [UserService],
 })
-export class AuthModule {}
+export class UserModule {}

@@ -4,22 +4,30 @@ import { PrismaService } from '../prisma/prisma.service';
 import { NewsApiAdapter } from 'src/adapters/news-api.adapter';
 import { TheNewsApiAdapter } from 'src/adapters/the-news-api.adapter';
 import axios from 'axios';
+import { adapterPriority } from 'src/utils/constants/adapter-priority';
+import { apiName } from 'src/utils/enums/api-name.enum';
+import { NewsAdapter } from 'src/interfaces/news-adapter.interface';
 
 @Injectable()
-export class ArticleService {
-  // implements OnModuleInit {
+export class ArticleService implements OnModuleInit {
   private logger = new Logger(ArticleService.name);
+  private adapterMap: null | Record<apiName, NewsAdapter> = null;
 
   constructor(
     private prisma: PrismaService,
-    private newsApi: NewsApiAdapter,
-    private theNewsApi: TheNewsApiAdapter,
-  ) {}
+    private newsApiAdapter: NewsApiAdapter,
+    private theNewsApiAdapter: TheNewsApiAdapter,
+  ) {
+    this.adapterMap = {
+      [apiName.NEWS_API]: this.newsApiAdapter,
+      [apiName.THE_NEWS_API]: this.theNewsApiAdapter,
+    };
+  }
 
-  //   async onModuleInit() {
-  //     this.logger.log('App started — fetching articles immediately');
-  //     await this.fetchArticles();
-  //   }
+  async onModuleInit() {
+    this.logger.log('App started — fetching articles immediately');
+    await this.fetchArticles();
+  }
 
   @Cron(CronExpression.EVERY_4_HOURS)
   async fetchArticles() {
@@ -27,18 +35,16 @@ export class ArticleService {
     const from = new Date(now.getTime() - 28 * 60 * 60 * 1000);
     const to = new Date(now.getTime() - 24 * 60 * 60 * 1000);
 
-    try {
-      await this.processArticles(await this.newsApi.fetchArticles(from, to));
-      await this.updateSourceStatus('NewsAPI', 'Active');
-    } catch (err) {
-      await this.updateSourceStatus('NewsAPI', 'Inactive');
+    for (let api of Object.values(apiName)) {
+      if (!this.adapterMap) return;
+      const adapter = this.adapterMap[api];
       try {
-        await this.processArticles(
-          await this.theNewsApi.fetchArticles(from, to),
-        );
-        await this.updateSourceStatus('TheNewsAPI', 'Active');
-      } catch (fallbackErr) {
-        await this.updateSourceStatus('TheNewsAPI', 'Inactive');
+        const response = await adapter.fetchArticles(from, to);
+        await this.processArticles(response);
+        await this.updateSourceStatus(api, 'Active');
+        break;
+      } catch (err) {
+        await this.updateSourceStatus(api, 'Inactive');
       }
     }
   }

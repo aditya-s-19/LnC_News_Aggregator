@@ -1,9 +1,23 @@
+import readline from "readline/promises";
+import { stdin as input, stdout as output } from "process";
+import axios from "axios";
+import { AppStateService } from "../services/app-state.service";
+import { mainMenuPage } from "./main-menu";
+import { handleAxiosError } from "../helper/handle-axios-error";
+import { normalUserPage } from "./normal-user";
+
 export async function searchArticlesPage(): Promise<void> {
+  const rl = readline.createInterface({ input, output });
+  const appState: AppStateService = AppStateService.getInstance();
+  const user = appState.getUser();
+  if (!user) return mainMenuPage();
+
   const query = await rl.question("Search: ");
+  rl.close();
 
   try {
-    const res = await axios.get(`http://localhost:3000/articles/search?query=${encodeURIComponent(query)}`, {
-      headers: { Authorization: `Bearer ${token}` },
+    const res = await axios.get(`http://localhost:3000/articles?search=${encodeURIComponent(query)}`, {
+      headers: { Authorization: `Bearer ${user.accessToken}` },
     });
 
     const articles = res.data;
@@ -16,5 +30,5 @@ export async function searchArticlesPage(): Promise<void> {
     handleAxiosError(err);
   }
 
-  await userPage();
+  await normalUserPage();
 }
