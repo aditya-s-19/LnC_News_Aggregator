@@ -1,0 +1,7 @@
+POST http://localhost:8000/classify
+Content-Type: application/json
+
+{
+  "text": "Yesterday Virat Kohli played very well",
+  "labels": ["Business", "bad", "new", "business", "big", "small", "sports"]
+}

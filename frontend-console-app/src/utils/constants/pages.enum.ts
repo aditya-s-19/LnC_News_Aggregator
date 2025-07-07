@@ -1,0 +1,28 @@
+export enum PagesName {
+  //main menu
+  LOGIN = "Login",
+  REGISTER = "Register",
+  MAIN_MENU = "Main Menu",
+  LOGOUT = "Logout",
+  EXIT = "Exit",
+
+  //admin menu
+  ADMIN_MENU = "Admin Menu",
+  VIEW_APIS = "View Apis",
+  VIEW_APIS_DETAIL = "View Apis Detail",
+  EDIT_APIS_DETAIL = "Edit Apis Detail",
+  ADD_CATEGORY = "Add Category",
+  ADMIN_MODERATION = "Admin Moderation",
+
+  //user menu
+  USER_MENU = "User Menu",
+  VIEW_ARTICLE_DETAILS = "View Article Details",
+  VIEW_RECOMMENDATIONS = "View Recommendations",
+  SEARCH_ARTICLES = "Search Articles",
+  VIEW_SAVED_ARTICLES = "View Saved Articles",
+  SAVE_ARTICLE = "Save Article",
+  UNSAVE_ARTICLE = "Unsave Article",
+  MANAGE_NOTIFICATIONS = "Manage Notifications",
+  VIEW_NOTIFICATIONS = "View Notifications",
+  REPORT_ARTICLE = "Report Article",
+}

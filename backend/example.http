@@ -1,0 +1,39 @@
+GET http://localhost:3000/protected
+
+###
+
+POST http://localhost:3000/auth/register
+Content-Type: application/json
+
+{
+  "email": "aditya@admin.com",
+  "password": "aditya@admin",
+  "name": "Aditya Admin"
+}
+
+###
+
+POST http://localhost:3000/auth/login
+Content-Type: application/json
+
+{
+  "email": "eddy@bruh.com",
+  "password": "eddy@bruh"
+}
+
+
+###
+
+GET http://localhost:3000/protected 
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJlbWFpbCI6ImVkZHlAYnJ1aC5jb20iLCJzdWIiOjEsInVzZXJuYW1lIjoiRWRkeSBicnVoIiwicm9sZSI6InVzZXIiLCJpYXQiOjE3NTA0MDg4NzMsImV4cCI6MTc1MDQxMjQ3M30.iVNzcB-dDXe4FotUoV5nua5txchrMnKTdR9rDXGQfu8
+
+###
+
+GET http://localhost:3000/admin/sources 
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJlbWFpbCI6ImFkaXR5YUBhZG1pbi5jb20iLCJzdWIiOjIsInVzZXJuYW1lIjoiQWRpdHlhIEFkbWluIiwicm9sZSI6ImFkbWluIiwiaWF0IjoxNzUwNDA4OTIwLCJleHAiOjE3NTA0MTI1MjB9.9dAHhMrdJmbpAbcYwNFzN8rD7tTV02elMHnzajIUdYI
+
+
+###
+
+GET http://localhost:3000/article?search=Yoga 
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJlbWFpbCI6ImVkZHlAYnJ1aC5jb20iLCJzdWIiOjEsInVzZXJuYW1lIjoiRWRkeSBicnVoIiwicm9sZSI6InVzZXIiLCJpYXQiOjE3NTE0MzU5NjYsImV4cCI6MTc1MTQzOTU2Nn0.3YT4LXHHf6IC9Cos3sHh9TU7G9k8fXqa038aLgSdR_g
