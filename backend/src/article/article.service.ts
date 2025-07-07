@@ -1,12 +1,17 @@
-import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
+import {
+  ConflictException,
+  Injectable,
+  Logger,
+  OnModuleInit,
+} from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { PrismaService } from '../prisma/prisma.service';
 import { NewsApiAdapter } from 'src/adapters/news-api.adapter';
 import { TheNewsApiAdapter } from 'src/adapters/the-news-api.adapter';
 import axios from 'axios';
-import { adapterPriority } from 'src/utils/constants/adapter-priority';
 import { apiName } from 'src/utils/enums/api-name.enum';
 import { NewsAdapter } from 'src/interfaces/news-adapter.interface';
+import { ArticleResponseDto } from './dtos/article-response.dto';
 
 @Injectable()
 export class ArticleService implements OnModuleInit {
@@ -26,11 +31,11 @@ export class ArticleService implements OnModuleInit {
 
   async onModuleInit() {
     this.logger.log('App started — fetching articles immediately');
-    await this.fetchArticles();
+    // await this.fetchArticlesFromExternalApisIntoDb();
   }
 
   @Cron(CronExpression.EVERY_4_HOURS)
-  async fetchArticles() {
+  async fetchArticlesFromExternalApisIntoDb() {
     const now = new Date();
     const from = new Date(now.getTime() - 28 * 60 * 60 * 1000);
     const to = new Date(now.getTime() - 24 * 60 * 60 * 1000);
@@ -47,6 +52,125 @@ export class ArticleService implements OnModuleInit {
         await this.updateSourceStatus(api, 'Inactive');
       }
     }
+  }
+  async getCategories() {
+    return await this.prisma.category.findMany({
+      orderBy: { id: 'asc' },
+    });
+  }
+
+  async getArticles(
+    userId: number,
+    filter: {
+      from?: Date;
+      to?: Date;
+      category_id?: number;
+      search?: string;
+      orderBy: 'published_at' | 'like_count' | 'dislike_count';
+      orderDirection: 'asc' | 'desc';
+    },
+  ): Promise<ArticleResponseDto[]> {
+    const where: any = {};
+
+    if (filter.from || filter.to) {
+      where.published_at = {};
+      if (filter.from) where.published_at.gte = filter.from;
+      if (filter.to) where.published_at.lte = filter.to;
+    }
+
+    if (filter.category_id) {
+      where.category_id = filter.category_id;
+    }
+
+    if (filter.search) {
+      const searchTerm = filter.search.trim();
+      where.OR = [
+        { headline: { contains: searchTerm, mode: 'insensitive' } },
+        { description: { contains: searchTerm, mode: 'insensitive' } },
+      ];
+    }
+
+    const articles = await this.prisma.article.findMany({
+      where,
+      orderBy: {
+        [filter.orderBy]: filter.orderDirection,
+      },
+      include: {
+        savedBy: { where: { user_id: userId }, select: { id: true } },
+        reactions: {
+          where: { user_id: userId },
+          select: { reaction_id: true },
+        },
+      },
+    });
+
+    return articles.map((article) => ({
+      id: article.id,
+      headline: article.headline,
+      description: article.description,
+      source: article.source,
+      url: article.url,
+      published_at: article.published_at,
+      category_id: article.category_id,
+      isSaved: article.savedBy.length > 0,
+      reaction_id: article.reactions[0]?.reaction_id ?? null,
+    }));
+  }
+
+  async getSavedArticles(userId: number): Promise<ArticleResponseDto[]> {
+    const savedArticles = await this.prisma.userSavedArticle.findMany({
+      where: { user_id: userId },
+      include: {
+        article: {
+          include: {
+            reactions: {
+              where: { user_id: userId },
+              select: { reaction_id: true },
+            },
+          },
+        },
+      },
+      orderBy: {
+        id: 'desc',
+      },
+    });
+
+    return savedArticles.map(({ article }) => ({
+      id: article.id,
+      headline: article.headline,
+      description: article.description,
+      source: article.source,
+      url: article.url,
+      published_at: article.published_at,
+      category_id: article.category_id,
+      isSaved: true,
+      reaction_id: article.reactions[0]?.reaction_id ?? null,
+    }));
+  }
+
+  async saveArticle(userId: number, articleId: number) {
+    await this.prisma.userSavedArticle.create({
+      data: {
+        user_id: userId,
+        article_id: articleId,
+      },
+    });
+  }
+
+  async unsaveArticle(userId: number, articleId: number) {
+    await this.prisma.userSavedArticle.deleteMany({
+      where: {
+        user_id: userId,
+        article_id: articleId,
+      },
+    });
+  }
+
+  async getReactions() {
+    return await this.prisma.reaction.findMany({
+      orderBy: { id: 'asc' },
+      select: { id: true, name: true },
+    });
   }
 
   private async processArticles(articles: any[]) {
@@ -117,10 +241,144 @@ export class ArticleService implements OnModuleInit {
   ) {
     const source = await this.prisma.newsSource.findFirst({ where: { name } });
     if (source) {
+      const updatedData: {
+        status: 'Active' | 'Inactive';
+        last_accessed?: Date;
+      } = { status };
+      if (status === 'Active') updatedData.last_accessed = new Date();
       await this.prisma.newsSource.update({
         where: { id: source.id },
-        data: { status, last_accessed: new Date() },
+        data: updatedData,
       });
     }
+  }
+
+  async reactToArticle(userId: number, articleId: number, reactionId: number) {
+    const existing = await this.prisma.userArticleReaction.findFirst({
+      where: { user_id: userId, article_id: articleId },
+    });
+
+    if (!existing) {
+      return this.addReaction(userId, articleId, reactionId);
+    }
+
+    return this.updateReaction(existing, reactionId);
+  }
+
+  private async addReaction(
+    userId: number,
+    articleId: number,
+    reactionId: number,
+  ) {
+    await this.prisma.userArticleReaction.create({
+      data: {
+        user_id: userId,
+        article_id: articleId,
+        reaction_id: reactionId,
+      },
+    });
+
+    const reaction = await this.prisma.reaction.findFirst({
+      where: { id: reactionId },
+      select: { name: true },
+    });
+
+    if (!reaction) return;
+
+    if (reaction.name === 'like') {
+      await this.prisma.article.update({
+        where: { id: articleId },
+        data: { like_count: { increment: 1 } },
+      });
+    } else if (reaction.name === 'dislike') {
+      await this.prisma.article.update({
+        where: { id: articleId },
+        data: { dislike_count: { increment: 1 } },
+      });
+    }
+  }
+
+  private async updateReaction(
+    reactionRecord: {
+      id: number;
+      user_id: number;
+      article_id: number;
+      reaction_id: number;
+    },
+    newReactionId: number,
+  ) {
+    const reactionRecordId = reactionRecord.id;
+
+    const [previousReaction, newReaction] = await Promise.all([
+      this.prisma.reaction.findUnique({
+        where: { id: reactionRecord.reaction_id },
+        select: { name: true },
+      }),
+      this.prisma.reaction.findUnique({
+        where: { id: newReactionId },
+        select: { name: true },
+      }),
+    ]);
+
+    if (previousReaction?.name === newReaction?.name)
+      throw new ConflictException(
+        'This reaction already exists on this article',
+      );
+
+    await this.prisma.userArticleReaction.update({
+      where: { id: reactionRecordId },
+      data: { reaction_id: newReactionId },
+    });
+
+    const updates: {
+      like_count?: { [key: string]: number };
+      dislike_count?: { [key: string]: number };
+    } = {};
+    if (previousReaction?.name === 'like') {
+      updates.like_count = { decrement: 1 };
+    } else if (previousReaction?.name === 'dislike') {
+      updates.dislike_count = { decrement: 1 };
+    }
+
+    if (newReaction?.name === 'like') {
+      updates.like_count = { increment: 1 };
+    } else if (newReaction?.name === 'dislike') {
+      updates.dislike_count = {
+        increment: 1,
+      };
+    }
+
+    if (Object.keys(updates).length > 0) {
+      await this.prisma.article.update({
+        where: { id: reactionRecord.article_id },
+        data: updates,
+      });
+    }
+  }
+
+  async removeReaction(userId: number, articleId: number): Promise<void> {
+    const existing = await this.prisma.userArticleReaction.findFirst({
+      where: { user_id: userId, article_id: articleId },
+    });
+
+    const reaction = await this.prisma.reaction.findFirst({
+      where: { id: existing!.reaction_id },
+    });
+
+    if (reaction?.name === 'like' || reaction?.name === 'dislike') {
+      const updates = {
+        [reaction.name === 'like' ? 'like_count' : 'dislike_count']: {
+          decrement: 1,
+        },
+      };
+      await this.prisma.article.update({
+        where: { id: articleId },
+        data: updates,
+      });
+    }
+
+    await this.prisma.userArticleReaction.delete({
+      where: { id: existing!.id },
+    });
   }
 }

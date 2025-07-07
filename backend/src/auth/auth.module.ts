@@ -28,5 +28,6 @@ if (!jwtSecret) {
   ],
   providers: [AuthService, JwtStrategy, AuthValidator],
   controllers: [AuthController],
+  exports: [AuthValidator],
 })
 export class AuthModule {}

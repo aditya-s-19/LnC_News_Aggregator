@@ -6,9 +6,16 @@ import { ScheduleModule } from '@nestjs/schedule';
 import { ArticleModule } from './article/article.module';
 import { AuthModule } from './auth/auth.module';
 import { UserService } from './user/user.service';
+import { AdminModule } from './admin/admin.module';
 
 @Module({
-  imports: [PrismaModule, ScheduleModule.forRoot(), ArticleModule, AuthModule],
+  imports: [
+    PrismaModule,
+    ScheduleModule.forRoot(),
+    ArticleModule,
+    AuthModule,
+    AdminModule,
+  ],
   controllers: [AppController],
   providers: [AppService, UserService],
 })

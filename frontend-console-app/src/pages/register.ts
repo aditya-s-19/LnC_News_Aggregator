@@ -1,15 +1,14 @@
-import readline from "readline/promises";
-import { stdin as input, stdout as output } from "process";
 import axios from "axios";
 import { handleAxiosError } from "../helper/handle-axios-error";
 import { mainMenuPage } from "./main-menu";
+import { renderPage } from "../utils/helper/runPage";
+import { PagesName } from "../utils/constants/pages.enum";
+import { ReadlineService } from "../services/readline.service";
 
 export async function registerPage(): Promise<void> {
-  const rl = readline.createInterface({ input, output });
-  const email = await rl.question("Email: ");
-  const password = await rl.question("Password: ");
-  const username = await rl.question("Name: ");
-  rl.close();
+  const email = await ReadlineService.ask("Email: ");
+  const password = await ReadlineService.ask("Password: ");
+  const username = await ReadlineService.ask("Name: ");
 
   try {
     await axios.post("http://localhost:3000/auth/register", { email, password, name: username });
@@ -18,5 +17,5 @@ export async function registerPage(): Promise<void> {
     handleAxiosError(err);
   }
 
-  await mainMenuPage();
+  return renderPage(mainMenuPage, PagesName.MAIN_MENU);
 }

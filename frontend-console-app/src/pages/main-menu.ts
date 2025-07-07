@@ -1,29 +1,27 @@
-import readline from "readline/promises";
-import { stdin as input, stdout as output } from "process";
 import { registerPage } from "./register";
 import { loginPage } from "./login";
 import { exitAppPage } from "./exit-app";
+import { renderPage } from "../utils/helper/runPage";
+import { PagesName } from "../utils/constants/pages.enum";
+import { ReadlineService } from "../services/readline.service";
 
 export async function mainMenuPage(): Promise<void> {
-  const rl = readline.createInterface({ input, output });
   console.log("\n🌟 Main Menu");
   console.log("1️⃣ Register");
   console.log("2️⃣ Login");
   console.log("0️⃣ Exit");
 
-  const choice = await rl.question("Choose: ");
-  rl.close();
+  const choice = await ReadlineService.ask("Choose: ");
+
   switch (choice) {
     case "1":
-      registerPage();
-      break;
+      return renderPage(registerPage, PagesName.REGISTER);
     case "2":
-      loginPage();
-      break;
+      return renderPage(loginPage, PagesName.LOGIN);
     case "0":
-      return exitAppPage();
+      return renderPage(exitAppPage, PagesName.EXIT);
     default:
       console.log("❌ Invalid choice");
-      mainMenuPage();
+      return renderPage(mainMenuPage, PagesName.MAIN_MENU);
   }
 }

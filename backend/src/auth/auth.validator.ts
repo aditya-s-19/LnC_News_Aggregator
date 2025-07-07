@@ -24,6 +24,14 @@ export class AuthValidator {
     if (response) throw new UserFoundException();
   }
 
+  public async userIdShouldExist(userId: number) {
+    const response = await this.prisma.user.findFirst({
+      where: { id: userId },
+    });
+    if (!response) throw new UserNotFoundException();
+    return response;
+  }
+
   public async validateUser(
     email: string,
     pass: string,
