@@ -16,7 +16,7 @@ import { JwtAuthGuard } from 'src/guards/jwt.guard';
 import { RolesGuard } from 'src/guards/roles.guard';
 import { Roles } from 'src/decorators/roles.decorator';
 import { ArticleResponseDto } from './dtos/article-response.dto';
-import { AuthValidator } from 'src/auth/auth.validator';
+import { AuthValidator } from '../auth/auth.validator';
 
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Roles('user')

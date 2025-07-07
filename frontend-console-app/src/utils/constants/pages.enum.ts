@@ -15,4 +15,6 @@ export enum PagesName {
   VIEW_SAVED_ARTICLES = "View Saved Articles",
   SAVE_ARTICLE = "Save Article",
   UNSAVE_ARTICLE = "Unsave Article",
+  MANAGE_NOTIFICATIONS = "Manage Notifications",
+  VIEW_NOTIFICATIONS = "View Notifications",
 }

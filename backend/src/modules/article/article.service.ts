@@ -5,13 +5,15 @@ import {
   OnModuleInit,
 } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
-import { PrismaService } from '../prisma/prisma.service';
+import { PrismaService } from 'src/prisma/prisma.service';
 import { NewsApiAdapter } from 'src/adapters/news-api.adapter';
 import { TheNewsApiAdapter } from 'src/adapters/the-news-api.adapter';
 import axios from 'axios';
 import { apiName } from 'src/utils/enums/api-name.enum';
 import { NewsAdapter } from 'src/interfaces/news-adapter.interface';
 import { ArticleResponseDto } from './dtos/article-response.dto';
+import { NotificationService } from '../notification/notification.service';
+import { EmailService } from '../email/email.service';
 
 @Injectable()
 export class ArticleService implements OnModuleInit {
@@ -22,6 +24,8 @@ export class ArticleService implements OnModuleInit {
     private prisma: PrismaService,
     private newsApiAdapter: NewsApiAdapter,
     private theNewsApiAdapter: TheNewsApiAdapter,
+    private notificationService: NotificationService,
+    private emailService: EmailService,
   ) {
     this.adapterMap = {
       [apiName.NEWS_API]: this.newsApiAdapter,
@@ -46,6 +50,7 @@ export class ArticleService implements OnModuleInit {
       try {
         const response = await adapter.fetchArticles(from, to);
         await this.processArticles(response);
+        await this.sendArticleNotificationsToUsers(from, to); // 👈 Add this
         await this.updateSourceStatus(api, 'Active');
         break;
       } catch (err) {
@@ -53,6 +58,88 @@ export class ArticleService implements OnModuleInit {
       }
     }
   }
+
+  private async sendArticleNotificationsToUsers(from: Date, to: Date) {
+    const users = await this.prisma.user.findMany();
+
+    const newArticles = await this.prisma.article.findMany({
+      where: {
+        published_at: { gte: from, lte: to },
+      },
+      include: { category: true },
+    });
+
+    for (const user of users) {
+      const [categories, keywords, notification] = await Promise.all([
+        this.prisma.userSubscribedCategory.findMany({
+          where: { user_id: user.id },
+        }),
+        this.prisma.userSubscribedKeyword.findMany({
+          where: { user_id: user.id },
+        }),
+        this.prisma.userNotification.findUnique({
+          where: { user_id: user.id },
+        }),
+      ]);
+
+      const lastViewed =
+        notification?.last_notifications_viewed_at ?? new Date(0);
+
+      const keywordMap = new Map<number, string[]>();
+      for (const k of keywords) {
+        if (!keywordMap.has(k.category_id)) keywordMap.set(k.category_id, []);
+        keywordMap.get(k.category_id)!.push(k.keyword.toLowerCase());
+      }
+
+      const enabledCategoryIds = categories.map((c) => c.category_id);
+
+      const matchedArticles = newArticles.filter((article) => {
+        if (
+          !article.category_id ||
+          !enabledCategoryIds.includes(article.category_id)
+        ) {
+          return false;
+        }
+
+        const keywords = keywordMap.get(article.category_id);
+        const isAfterLastViewed = article.published_at > lastViewed;
+
+        if (!keywords || keywords.length === 0) {
+          // No keywords → include all articles in this category
+          return isAfterLastViewed;
+        }
+
+        const content =
+          `${article.headline} ${article.description ?? ''}`.toLowerCase();
+        const matchesKeyword = keywords.some((k) => content.includes(k));
+        return matchesKeyword && isAfterLastViewed;
+      });
+
+      if (matchedArticles.length === 0) continue;
+
+      const lines = matchedArticles
+        .map((a) => `📰 ${a.headline}\n🔗 ${a.url}\n`)
+        .join('\n');
+
+      const message = `
+  Hi ${user.username},
+  
+  Here are your latest news updates based on your preferences:
+  
+  ${lines}
+  
+  Regards,  
+  LnC News Aggregator Team
+      `.trim();
+
+      await this.emailService.sendEmail(
+        user.email,
+        '🗞️ Your News Digest',
+        message,
+      );
+    }
+  }
+
   async getCategories() {
     return await this.prisma.category.findMany({
       orderBy: { id: 'asc' },

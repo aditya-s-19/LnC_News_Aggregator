@@ -5,10 +5,12 @@ import { TheNewsApiAdapter } from 'src/adapters/the-news-api.adapter';
 import { PrismaModule } from 'src/prisma/prisma.module';
 import { ArticleValidator } from './article.validator';
 import { ArticleController } from './article.controller';
-import { AuthModule } from 'src/auth/auth.module';
+import { AuthModule } from 'src/modules/auth/auth.module';
+import { NotificationModule } from '../notification/notification.module';
+import { EmailModule } from '../email/email.module';
 
 @Module({
-  imports: [PrismaModule, AuthModule],
+  imports: [PrismaModule, AuthModule, NotificationModule, EmailModule],
   controllers: [ArticleController],
   providers: [
     ArticleService,

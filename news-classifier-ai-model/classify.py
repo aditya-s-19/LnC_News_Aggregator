@@ -27,7 +27,7 @@ async def classify(request: Request):
             return {"error": "Missing text or labels"}
 
         result = classifier(text, candidate_labels=labels)
-        print(f"✅ Classification completed in {time.time() - start_time:.2f} seconds.")
+        print(f"✅ Classification completed in {time.time() - start_time:.2f} seconds : ",result["labels"][0])
         
         return {
             "label": result["labels"][0],
