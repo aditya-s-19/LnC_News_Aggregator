@@ -12,8 +12,9 @@ import axios from 'axios';
 import { apiName } from 'src/utils/enums/api-name.enum';
 import { NewsAdapter } from 'src/interfaces/news-adapter.interface';
 import { ArticleResponseDto } from './dtos/article-response.dto';
-import { NotificationService } from '../notification/notification.service';
 import { EmailService } from '../email/email.service';
+import { ArticleValidator } from './article.validator';
+import { Article } from '@prisma/client';
 
 @Injectable()
 export class ArticleService implements OnModuleInit {
@@ -24,8 +25,8 @@ export class ArticleService implements OnModuleInit {
     private prisma: PrismaService,
     private newsApiAdapter: NewsApiAdapter,
     private theNewsApiAdapter: TheNewsApiAdapter,
-    private notificationService: NotificationService,
     private emailService: EmailService,
+    private articleValidator: ArticleValidator,
   ) {
     this.adapterMap = {
       [apiName.NEWS_API]: this.newsApiAdapter,
@@ -50,7 +51,7 @@ export class ArticleService implements OnModuleInit {
       try {
         const response = await adapter.fetchArticles(from, to);
         await this.processArticles(response);
-        await this.sendArticleNotificationsToUsers(from, to); // 👈 Add this
+        await this.sendEmailNotificationsToUsers(from, to);
         await this.updateSourceStatus(api, 'Active');
         break;
       } catch (err) {
@@ -59,15 +60,19 @@ export class ArticleService implements OnModuleInit {
     }
   }
 
-  private async sendArticleNotificationsToUsers(from: Date, to: Date) {
+  private async sendEmailNotificationsToUsers(from: Date, to: Date) {
     const users = await this.prisma.user.findMany();
 
-    const newArticles = await this.prisma.article.findMany({
+    const latestUncensoredArticles = await this.prisma.article.findMany({
       where: {
         published_at: { gte: from, lte: to },
       },
       include: { category: true },
     });
+
+    const newArticles = await this.filterOutCensoredArticlesByCategoryOrKeyword(
+      latestUncensoredArticles,
+    );
 
     for (const user of users) {
       const [categories, keywords, notification] = await Promise.all([
@@ -142,6 +147,7 @@ export class ArticleService implements OnModuleInit {
 
   async getCategories() {
     return await this.prisma.category.findMany({
+      where: { isHidden: false },
       orderBy: { id: 'asc' },
     });
   }
@@ -191,17 +197,30 @@ export class ArticleService implements OnModuleInit {
       },
     });
 
-    return articles.map((article) => ({
-      id: article.id,
-      headline: article.headline,
-      description: article.description,
-      source: article.source,
-      url: article.url,
-      published_at: article.published_at,
-      category_id: article.category_id,
-      isSaved: article.savedBy.length > 0,
-      reaction_id: article.reactions[0]?.reaction_id ?? null,
-    }));
+    const visibleArticles = await this.filterOutCensoredArticles(
+      userId,
+      articles.map((article) => ({
+        id: article.id,
+      })),
+    );
+
+    return articles
+      .filter((article) =>
+        visibleArticles.find(
+          (visibleArticle) => visibleArticle.id === article.id,
+        ),
+      )
+      .map((article) => ({
+        id: article.id,
+        headline: article.headline,
+        description: article.description,
+        source: article.source,
+        url: article.url,
+        published_at: article.published_at,
+        category_id: article.category_id,
+        isSaved: article.savedBy.length > 0,
+        reaction_id: article.reactions[0]?.reaction_id ?? null,
+      }));
   }
 
   async getSavedArticles(userId: number): Promise<ArticleResponseDto[]> {
@@ -222,17 +241,30 @@ export class ArticleService implements OnModuleInit {
       },
     });
 
-    return savedArticles.map(({ article }) => ({
-      id: article.id,
-      headline: article.headline,
-      description: article.description,
-      source: article.source,
-      url: article.url,
-      published_at: article.published_at,
-      category_id: article.category_id,
-      isSaved: true,
-      reaction_id: article.reactions[0]?.reaction_id ?? null,
-    }));
+    const filteredArticles = await this.filterOutCensoredArticles(
+      userId,
+      savedArticles.map((article) => ({
+        id: article.id,
+      })),
+    );
+
+    return savedArticles
+      .filter((article) =>
+        filteredArticles.find(
+          (filteredArticle) => filteredArticle.id === article.id,
+        ),
+      )
+      .map(({ article }) => ({
+        id: article.id,
+        headline: article.headline,
+        description: article.description,
+        source: article.source,
+        url: article.url,
+        published_at: article.published_at,
+        category_id: article.category_id,
+        isSaved: true,
+        reaction_id: article.reactions[0]?.reaction_id ?? null,
+      }));
   }
 
   async saveArticle(userId: number, articleId: number) {
@@ -260,6 +292,105 @@ export class ArticleService implements OnModuleInit {
     });
   }
 
+  async reactToArticle(userId: number, articleId: number, reactionId: number) {
+    const existing = await this.prisma.userArticleReaction.findFirst({
+      where: { user_id: userId, article_id: articleId },
+    });
+
+    if (!existing) {
+      return this.addReaction(userId, articleId, reactionId);
+    }
+
+    return this.updateReaction(existing, reactionId);
+  }
+
+  async removeReaction(userId: number, articleId: number): Promise<void> {
+    const existing = await this.prisma.userArticleReaction.findFirst({
+      where: { user_id: userId, article_id: articleId },
+    });
+
+    const reaction = await this.prisma.reaction.findFirst({
+      where: { id: existing!.reaction_id },
+    });
+
+    if (reaction?.name === 'like' || reaction?.name === 'dislike') {
+      const updates = {
+        [reaction.name === 'like' ? 'like_count' : 'dislike_count']: {
+          decrement: 1,
+        },
+      };
+      await this.prisma.article.update({
+        where: { id: articleId },
+        data: updates,
+      });
+    }
+
+    await this.prisma.userArticleReaction.delete({
+      where: { id: existing!.id },
+    });
+  }
+
+  async reportArticle(userId: number, articleId: number): Promise<void> {
+    const isReportAlreadyExisting =
+      await this.prisma.userReportedArticle.findFirst({
+        where: { user_id: userId, article_id: articleId },
+      });
+
+    if (isReportAlreadyExisting)
+      throw new ConflictException('This report already exists.');
+
+    await this.prisma.userReportedArticle.create({
+      data: {
+        user_id: userId,
+        article_id: articleId,
+      },
+    });
+
+    const reportCount = await this.prisma.userReportedArticle.count({
+      where: { article_id: articleId },
+    });
+
+    if (reportCount >= 5) {
+      await this.prisma.article.update({
+        where: { id: articleId },
+        data: { isHidden: true },
+      });
+    }
+  }
+
+  async filterOutCensoredArticles(
+    userId: number,
+    articles: { id: number }[],
+  ): Promise<typeof articles> {
+    const result: typeof articles = [];
+    for (const article of articles) {
+      if (
+        !(await this.articleValidator.isArticleCensored(userId, article.id))
+      ) {
+        result.push(article);
+      }
+    }
+    return result;
+  }
+
+  async filterOutCensoredArticlesByCategoryOrKeyword(
+    articles: Article[],
+  ): Promise<Article[]> {
+    const result: Article[] = [];
+    for (const article of articles) {
+      if (
+        !(await this.articleValidator.isArticleCensoredByCategoryOrKeyword(
+          article.category_id,
+          article.headline,
+          article.description,
+        ))
+      ) {
+        result.push(article);
+      }
+    }
+    return result;
+  }
+
   private async processArticles(articles: any[]) {
     const categories = await this.prisma.category.findMany();
     const categoryNames = categories.map((c) => c.name.toLowerCase());
@@ -284,6 +415,7 @@ export class ArticleService implements OnModuleInit {
           url: item.url,
           published_at: new Date(item.publishedAt),
           category_id: categoryId,
+          isHidden: false,
         },
       });
     }
@@ -338,18 +470,6 @@ export class ArticleService implements OnModuleInit {
         data: updatedData,
       });
     }
-  }
-
-  async reactToArticle(userId: number, articleId: number, reactionId: number) {
-    const existing = await this.prisma.userArticleReaction.findFirst({
-      where: { user_id: userId, article_id: articleId },
-    });
-
-    if (!existing) {
-      return this.addReaction(userId, articleId, reactionId);
-    }
-
-    return this.updateReaction(existing, reactionId);
   }
 
   private async addReaction(
@@ -441,31 +561,5 @@ export class ArticleService implements OnModuleInit {
         data: updates,
       });
     }
-  }
-
-  async removeReaction(userId: number, articleId: number): Promise<void> {
-    const existing = await this.prisma.userArticleReaction.findFirst({
-      where: { user_id: userId, article_id: articleId },
-    });
-
-    const reaction = await this.prisma.reaction.findFirst({
-      where: { id: existing!.reaction_id },
-    });
-
-    if (reaction?.name === 'like' || reaction?.name === 'dislike') {
-      const updates = {
-        [reaction.name === 'like' ? 'like_count' : 'dislike_count']: {
-          decrement: 1,
-        },
-      };
-      await this.prisma.article.update({
-        where: { id: articleId },
-        data: updates,
-      });
-    }
-
-    await this.prisma.userArticleReaction.delete({
-      where: { id: existing!.id },
-    });
   }
 }

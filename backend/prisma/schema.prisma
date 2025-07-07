@@ -7,104 +7,137 @@
     url      = env("DATABASE_URL")
   }
 
-  model User {
-    id           Int                    @id @default(autoincrement())
-    username     String
-    email        String                 @unique
-    passwordHash String
-    role         String                 @default("user")
-    savedArticles UserSavedArticle[]
-    articleReactions UserArticleReaction[]
-    subscribedCategories UserSubscribedCategory[]
-    subscribedKeywords UserSubscribedKeyword[]
-    notifications UserNotification[]
-  }
+ model User {
+  id           Int                      @id @default(autoincrement())
+  username     String
+  email        String                   @unique
+  passwordHash String
+  role         String                   @default("user")
+  savedArticles        UserSavedArticle[]
+  articleReactions     UserArticleReaction[]
+  subscribedCategories UserSubscribedCategory[]
+  subscribedKeywords   UserSubscribedKeyword[]
+  notifications        UserNotification[]
+  reportedArticles     UserReportedArticle[]
+  readArticles         UserReadArticle[]  
+}
 
-  model Category {
-    id        Int       @id @default(autoincrement())
-    name      String    @unique
-    articles  Article[]
-    userSubscribedCategories UserSubscribedCategory[]
-    userSubscribedKeywords UserSubscribedKeyword[]
-  }
+model Category {
+  id        Int       @id @default(autoincrement())
+  name      String    @unique
+  isHidden  Boolean   @default(false)
+  articles  Article[]
+  userSubscribedCategories UserSubscribedCategory[]
+  userSubscribedKeywords   UserSubscribedKeyword[]
+}
 
-  model Article {
-    id           Int                  @id @default(autoincrement())
-    headline     String
-    description  String
-    source       String
-    url          String               @unique
-    published_at DateTime
-    created_at   DateTime             @default(now())
-    like_count   Int                  @default(0)
-    dislike_count Int                 @default(0)
-    category     Category?            @relation(fields: [category_id], references: [id])
-    category_id  Int?
-    savedBy      UserSavedArticle[]
-    reactions    UserArticleReaction[]
-  }
+model Article {
+  id           Int                  @id @default(autoincrement())
+  headline     String
+  description  String
+  source       String
+  url          String               @unique
+  published_at DateTime
+  created_at   DateTime             @default(now())
+  like_count   Int                  @default(0)
+  dislike_count Int                @default(0)
+  isHidden     Boolean              @default(false)
+  category     Category?            @relation(fields: [category_id], references: [id])
+  category_id  Int?
+  savedBy      UserSavedArticle[]
+  reactions    UserArticleReaction[]
+  reports      UserReportedArticle[]
+  readBy         UserReadArticle[] 
+}
 
-  model UserSavedArticle {
-    id        Int     @id @default(autoincrement())
-    user      User    @relation(fields: [user_id], references: [id])
-    user_id   Int
-    article   Article @relation(fields: [article_id], references: [id])
-    article_id Int
+model UserReportedArticle {
+  id         Int      @id @default(autoincrement())
+  user       User     @relation(fields: [user_id], references: [id])
+  user_id    Int
+  article    Article  @relation(fields: [article_id], references: [id])
+  article_id Int
+  created_at DateTime @default(now())
 
-    @@unique([user_id, article_id])
-  }
+  @@unique([user_id, article_id])
+}
 
-  model Reaction {
-    id   Int    @id @default(autoincrement())
-    name String @unique
-    userArticleReactions UserArticleReaction[]
-  }
+model UserReadArticle {
+  id         Int      @id @default(autoincrement())
+  user       User     @relation(fields: [user_id], references: [id])
+  user_id    Int
+  article    Article  @relation(fields: [article_id], references: [id])
+  article_id Int
+  read_at    DateTime @default(now())
 
-  model UserArticleReaction {
-    id          Int       @id @default(autoincrement())
-    user        User      @relation(fields: [user_id], references: [id])
-    user_id     Int
-    article     Article   @relation(fields: [article_id], references: [id])
-    article_id  Int
-    reaction    Reaction  @relation(fields: [reaction_id], references: [id])
-    reaction_id Int
+  @@unique([user_id, article_id])
+}
 
-    @@unique([user_id, article_id, reaction_id])
-  }
+model HiddenArticleKeyword {
+  id        Int      @id @default(autoincrement())
+  keyword   String   @unique
+  created_at DateTime @default(now())
+}
 
-  model UserSubscribedCategory {
-    id        Int      @id @default(autoincrement())
-    user      User     @relation(fields: [user_id], references: [id])
-    user_id   Int
-    category  Category @relation(fields: [category_id], references: [id])
-    category_id Int
+model UserSavedArticle {
+  id         Int     @id @default(autoincrement())
+  user       User    @relation(fields: [user_id], references: [id])
+  user_id    Int
+  article    Article @relation(fields: [article_id], references: [id])
+  article_id Int
 
-    @@unique([user_id, category_id])
-  }
+  @@unique([user_id, article_id])
+}
 
-  model UserSubscribedKeyword {
-    id        Int      @id @default(autoincrement())
-    user      User     @relation(fields: [user_id], references: [id])
-    user_id   Int
-    category  Category @relation(fields: [category_id], references: [id])
-    category_id Int
-    keyword   String
+model Reaction {
+  id   Int    @id @default(autoincrement())
+  name String @unique
+  userArticleReactions UserArticleReaction[]
+}
 
-    @@unique([user_id, category_id, keyword])
-  }
+model UserArticleReaction {
+  id          Int       @id @default(autoincrement())
+  user        User      @relation(fields: [user_id], references: [id])
+  user_id     Int
+  article     Article   @relation(fields: [article_id], references: [id])
+  article_id  Int
+  reaction    Reaction  @relation(fields: [reaction_id], references: [id])
+  reaction_id Int
 
-  model UserNotification {
-    id                      Int      @id @default(autoincrement())
-    user                    User     @relation(fields: [user_id], references: [id])
-    user_id                 Int      @unique
-    last_notifications_viewed_at DateTime
-  }
+  @@unique([user_id, article_id, reaction_id])
+}
 
-  model NewsSource {
-    id            Int      @id @default(autoincrement())
-    name          String
-    status        String
-    last_accessed DateTime
-    api_key       String
-  }
+model UserSubscribedCategory {
+  id          Int      @id @default(autoincrement())
+  user        User     @relation(fields: [user_id], references: [id])
+  user_id     Int
+  category    Category @relation(fields: [category_id], references: [id])
+  category_id Int
 
+  @@unique([user_id, category_id])
+}
+
+model UserSubscribedKeyword {
+  id          Int      @id @default(autoincrement())
+  user        User     @relation(fields: [user_id], references: [id])
+  user_id     Int
+  category    Category @relation(fields: [category_id], references: [id])
+  category_id Int
+  keyword     String
+
+  @@unique([user_id, category_id, keyword])
+}
+
+model UserNotification {
+  id                      Int      @id @default(autoincrement())
+  user                    User     @relation(fields: [user_id], references: [id])
+  user_id                 Int      @unique
+  last_notifications_viewed_at DateTime
+}
+
+model NewsSource {
+  id            Int      @id @default(autoincrement())
+  name          String
+  status        String
+  last_accessed DateTime
+  api_key       String
+}

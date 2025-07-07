@@ -1,15 +1,20 @@
 export enum PagesName {
+  //main menu
   LOGIN = "Login",
   REGISTER = "Register",
   MAIN_MENU = "Main Menu",
   LOGOUT = "Logout",
   EXIT = "Exit",
-  SEARCH = "Search",
+
+  //admin menu
   ADMIN_MENU = "Admin Menu",
   VIEW_APIS = "View Apis",
   VIEW_APIS_DETAIL = "View Apis Detail",
   EDIT_APIS_DETAIL = "Edit Apis Detail",
   ADD_CATEGORY = "Add Category",
+  ADMIN_MODERATION = "Admin Moderation",
+
+  //user menu
   USER_MENU = "User Menu",
   SEARCH_ARTICLES = "Search Articles",
   VIEW_SAVED_ARTICLES = "View Saved Articles",
@@ -17,4 +22,5 @@ export enum PagesName {
   UNSAVE_ARTICLE = "Unsave Article",
   MANAGE_NOTIFICATIONS = "Manage Notifications",
   VIEW_NOTIFICATIONS = "View Notifications",
+  REPORT_ARTICLE = "Report Article",
 }

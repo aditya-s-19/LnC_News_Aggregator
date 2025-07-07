@@ -1,10 +1,14 @@
 import { Injectable, BadRequestException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from 'src/prisma/prisma.service';
+import { ArticleService } from '../article/article.service';
 
 @Injectable()
 export class NotificationService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private articleService: ArticleService,
+  ) {}
 
   async getUserRelevantArticles(userId: number) {
     const user = await this.prisma.userNotification.findUnique({
@@ -61,7 +65,11 @@ export class NotificationService {
       orderBy: { published_at: 'desc' },
     });
 
-    // Update last viewed time
+    const visibleArticles = await this.articleService.filterOutCensoredArticles(
+      userId,
+      articles.map((a) => ({ id: a.id })),
+    );
+
     try {
       await this.prisma.userNotification.update({
         where: { user_id: userId },
@@ -80,11 +88,14 @@ export class NotificationService {
       }
     }
 
-    return articles;
+    return articles.filter((article) =>
+      visibleArticles.find((v) => v.id === article.id),
+    );
   }
 
   async getUserSettings(userId: number) {
     const categories = await this.prisma.category.findMany({
+      where: { isHidden: false },
       orderBy: { id: 'asc' },
     });
     const subscribed = await this.prisma.userSubscribedCategory.findMany({

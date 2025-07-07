@@ -32,8 +32,6 @@ export async function editApiKeyPage(): Promise<void> {
     console.log("❌ Failed to update API key");
   }
 
-  const rl2 = readline.createInterface({ input, output });
-  await rl2.question("\nPress Enter to return...");
-  rl2.close();
+  await ReadlineService.ask("\nPress Enter to return...");
   return renderPage(adminUserMenuPage, PagesName.ADMIN_MENU);
 }

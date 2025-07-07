@@ -6,11 +6,10 @@ import { PrismaModule } from 'src/prisma/prisma.module';
 import { ArticleValidator } from './article.validator';
 import { ArticleController } from './article.controller';
 import { AuthModule } from 'src/modules/auth/auth.module';
-import { NotificationModule } from '../notification/notification.module';
 import { EmailModule } from '../email/email.module';
 
 @Module({
-  imports: [PrismaModule, AuthModule, NotificationModule, EmailModule],
+  imports: [PrismaModule, AuthModule, EmailModule],
   controllers: [ArticleController],
   providers: [
     ArticleService,
@@ -18,5 +17,6 @@ import { EmailModule } from '../email/email.module';
     NewsApiAdapter,
     TheNewsApiAdapter,
   ],
+  exports: [ArticleValidator, ArticleService],
 })
 export class ArticleModule {}

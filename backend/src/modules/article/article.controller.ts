@@ -3,6 +3,7 @@ import {
   Delete,
   Get,
   Param,
+  ParseIntPipe,
   Post,
   Put,
   Query,
@@ -45,7 +46,7 @@ export class ArticleController {
     const userId = req.user.userId;
     await this.authValidator.userIdShouldExist(userId);
 
-    const validated = this.articleValidator.validateArticleQuery(
+    const validated = await this.articleValidator.validateArticleQuery(
       from,
       to,
       category_id,
@@ -75,6 +76,7 @@ export class ArticleController {
       userId,
       articleId,
     );
+    await this.articleValidator.articleShouldNotBeCensored(userId, articleId);
     await this.articleService.saveArticle(userId, articleId);
   }
 
@@ -87,6 +89,7 @@ export class ArticleController {
     await this.authValidator.userIdShouldExist(userId);
     await this.articleValidator.articleIdShouldExist(articleId);
     await this.articleValidator.articleShouldBeAlreadySaved(userId, articleId);
+    await this.articleValidator.articleShouldNotBeCensored(userId, articleId);
     await this.articleService.unsaveArticle(userId, articleId);
   }
 
@@ -105,6 +108,7 @@ export class ArticleController {
     await this.authValidator.userIdShouldExist(userId);
     await this.articleValidator.articleIdShouldExist(articleId);
     await this.articleValidator.reactionIdShouldExist(reactionId);
+    await this.articleValidator.articleShouldNotBeCensored(userId, articleId);
     await this.articleService.reactToArticle(userId, articleId, reactionId);
   }
 
@@ -114,9 +118,24 @@ export class ArticleController {
     @Param('articleId') articleId: number,
   ) {
     const userId = req.user.userId;
-    this.authValidator.userIdShouldExist(userId);
+    await this.authValidator.userIdShouldExist(userId);
     await this.articleValidator.articleIdShouldExist(articleId);
     await this.articleValidator.articleReactionShouldExist(userId, articleId);
+    await this.articleValidator.articleShouldNotBeCensored(userId, articleId);
     await this.articleService.removeReaction(userId, articleId);
+  }
+
+  @Post(':id/report')
+  @UseGuards(JwtAuthGuard)
+  async reportArticle(
+    @Param('id', ParseIntPipe) articleId: number,
+    @Req() req,
+  ) {
+    const userId = req.user.userId;
+    await this.authValidator.userIdShouldExist(req.userId);
+    await this.articleValidator.articleIdShouldExist(articleId);
+    await this.articleValidator.articleShouldNotBeCensored(userId, articleId);
+    await this.articleService.reportArticle(userId, articleId);
+    return { message: 'Article reported successfully' };
   }
 }

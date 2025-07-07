@@ -3,6 +3,7 @@ import {
   BadRequestException,
   ConflictException,
   NotFoundException,
+  ForbiddenException,
 } from '@nestjs/common';
 import { PrismaService } from 'src/prisma/prisma.service';
 
@@ -10,20 +11,20 @@ import { PrismaService } from 'src/prisma/prisma.service';
 export class ArticleValidator {
   constructor(private prisma: PrismaService) {}
 
-  validateArticleQuery(
+  async validateArticleQuery(
     from?: string,
     to?: string,
     category_id?: string,
     search?: string,
     order?: string,
-  ): {
+  ): Promise<{
     from?: Date;
     to?: Date;
     category_id?: number;
     search?: string;
     orderBy: 'published_at' | 'like_count' | 'dislike_count';
     orderDirection: 'asc' | 'desc';
-  } {
+  }> {
     let fromDate: Date | undefined;
     let toDate: Date | undefined;
     let catId: number | undefined;
@@ -49,6 +50,8 @@ export class ArticleValidator {
     if (category_id) {
       const n = Number(category_id);
       if (isNaN(n)) throw new BadRequestException('Invalid param: category_id');
+      await this.categoryIdShouldExist(Number(category_id));
+      await this.categoryIdShouldNotBeHidden(Number(category_id));
       catId = n;
     }
 
@@ -142,5 +145,93 @@ export class ArticleValidator {
     if (!existing) {
       throw new NotFoundException('No reaction found to remove.');
     }
+  }
+
+  async isArticleCensored(userId: number, articleId: number): Promise<boolean> {
+    const article = await this.prisma.article.findUnique({
+      where: { id: articleId },
+    });
+    if (!article || article.isHidden) return true;
+    const reported = await this.prisma.userReportedArticle.findFirst({
+      where: {
+        user_id: userId,
+        article_id: articleId,
+      },
+    });
+    if (reported) return true;
+
+    return await this.isArticleCensoredByCategoryOrKeyword(
+      article.category_id,
+      article.headline,
+      article.description,
+    );
+  }
+
+  async articleShouldNotBeCensored(userId: number, articleId: number) {
+    if (await this.isArticleCensored(userId, articleId))
+      throw new ForbiddenException('Access denied');
+  }
+
+  async articleIdShouldBeHidden(articleId: number) {
+    const article = await this.prisma.article.findUnique({
+      where: { id: articleId },
+    });
+    if (article && !article.isHidden)
+      throw new NotFoundException('Given article is not hidden.');
+  }
+
+  async articleIdShouldNotBeHidden(articleId: number) {
+    const article = await this.prisma.article.findUnique({
+      where: { id: articleId },
+    });
+    if (article && article.isHidden)
+      throw new ConflictException('Given article is already hidden.');
+  }
+
+  async isArticleCensoredByCategoryOrKeyword(
+    categoryId: number | null,
+    headline: string,
+    description: string,
+  ): Promise<boolean> {
+    if (categoryId) {
+      const category = await this.prisma.category.findUnique({
+        where: { id: categoryId },
+        select: { isHidden: true },
+      });
+      if (category?.isHidden) return true;
+    }
+
+    const keywords = await this.prisma.hiddenArticleKeyword.findMany();
+    const content = (headline + ' ' + description).toLowerCase();
+
+    const hasBannedKeyword = keywords.some((k) =>
+      content.includes(k.keyword.toLowerCase()),
+    );
+
+    return hasBannedKeyword;
+  }
+
+  async categoryIdShouldExist(categoryId: number): Promise<{
+    id: number;
+    isHidden: boolean;
+    name: string;
+  }> {
+    const category = await this.prisma.category.findFirst({
+      where: { id: categoryId },
+    });
+    if (!category) throw new NotFoundException('Category not found.');
+    return category;
+  }
+
+  async categoryIdShouldBeHidden(categoryId: number) {
+    const category = await this.categoryIdShouldExist(categoryId);
+    if (!category.isHidden)
+      throw new NotFoundException('Category is not hidden.');
+  }
+
+  async categoryIdShouldNotBeHidden(categoryId: number) {
+    const category = await this.categoryIdShouldExist(categoryId);
+    if (category.isHidden)
+      throw new ConflictException('Category is already hidden.');
   }
 }

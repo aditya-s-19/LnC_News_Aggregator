@@ -8,6 +8,7 @@ import { editApiKeyPage } from "./edit-api-detail";
 import { renderPage } from "../../utils/helper/runPage";
 import { PagesName } from "../../utils/constants/pages.enum";
 import { ReadlineService } from "../../services/readline.service";
+import { adminModerationMenuPage } from "./admin-moderation";
 
 export async function adminUserMenuPage(): Promise<void> {
   console.log("\n🛠️ Admin Menu");
@@ -15,6 +16,7 @@ export async function adminUserMenuPage(): Promise<void> {
   console.log("2️⃣  View API Details");
   console.log("3️⃣  Edit API Key");
   console.log("4️⃣  Add Category");
+  console.log("5️⃣  Manage Moderation");
   console.log("0️⃣  Back");
 
   const choice = await ReadlineService.ask("Choose: ");
@@ -28,6 +30,8 @@ export async function adminUserMenuPage(): Promise<void> {
       return renderPage(editApiKeyPage, PagesName.EDIT_APIS_DETAIL);
     case "4":
       return renderPage(addCategoryPage, PagesName.ADD_CATEGORY);
+    case "5":
+      return renderPage(adminModerationMenuPage, PagesName.ADMIN_MODERATION);
     case "0":
       return renderPage(mainMenuPage, PagesName.MAIN_MENU);
     default:
