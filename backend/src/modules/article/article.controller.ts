@@ -16,7 +16,10 @@ import { jwtPayload } from 'src/utils/types/jwt-payload';
 import { JwtAuthGuard } from 'src/guards/jwt.guard';
 import { RolesGuard } from 'src/guards/roles.guard';
 import { Roles } from 'src/decorators/roles.decorator';
-import { ArticleResponseDto } from './dtos/article-response.dto';
+import {
+  GetArticleByIdResponseDto,
+  GetArticlesResponseDto,
+} from './dtos/article-response.dto';
 import { AuthValidator } from '../auth/auth.validator';
 
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -42,7 +45,7 @@ export class ArticleController {
     @Query('category_id') category_id?: string,
     @Query('search') search?: string,
     @Query('order') order?: string, // ✅ keep only this
-  ): Promise<ArticleResponseDto[]> {
+  ): Promise<GetArticlesResponseDto[]> {
     const userId = req.user.userId;
     await this.authValidator.userIdShouldExist(userId);
 
@@ -58,7 +61,9 @@ export class ArticleController {
   }
 
   @Get('saved')
-  async getSavedArticles(@Req() req: { user: jwtPayload }) {
+  async getSavedArticles(
+    @Req() req: { user: jwtPayload },
+  ): Promise<GetArticlesResponseDto[]> {
     const userId = req.user.userId;
     await this.authValidator.userIdShouldExist(userId);
     return await this.articleService.getSavedArticles(userId);
@@ -67,7 +72,7 @@ export class ArticleController {
   @Post('save/:id')
   async saveArticle(
     @Req() req: { user: jwtPayload },
-    @Param('id') articleId: number,
+    @Param('id', ParseIntPipe) articleId: number,
   ) {
     const userId = req.user.userId;
     await this.authValidator.userIdShouldExist(userId);
@@ -83,7 +88,7 @@ export class ArticleController {
   @Delete('save/:id')
   async unsaveArticle(
     @Req() req: { user: jwtPayload },
-    @Param('id') articleId: number,
+    @Param('id', ParseIntPipe) articleId: number,
   ) {
     const userId = req.user.userId;
     await this.authValidator.userIdShouldExist(userId);
@@ -98,11 +103,30 @@ export class ArticleController {
     return await this.articleService.getReactions();
   }
 
+  @Get('recommendations')
+  async getRecommendations(@Req() req: { user: jwtPayload }) {
+    const userId = req.user.userId;
+    await this.authValidator.userIdShouldExist(userId);
+    return await this.articleService.getRecommendations(userId);
+  }
+
+  @Get(':id')
+  async getArticleDetails(
+    @Req() req: { user: jwtPayload },
+    @Param('id', ParseIntPipe) id: number,
+  ): Promise<GetArticleByIdResponseDto> {
+    const userId = req.user.userId;
+    await this.authValidator.userIdShouldExist(userId);
+    await this.articleValidator.articleIdShouldExist(id);
+    await this.articleValidator.articleShouldNotBeCensored(userId, id);
+    return await this.articleService.getDetailedArticle(userId, id);
+  }
+
   @Put(':articleId/reaction/:reactionId')
   async reactToArticle(
     @Req() req: { user: jwtPayload },
-    @Param('articleId') articleId: number,
-    @Param('reactionId') reactionId: number,
+    @Param('articleId', ParseIntPipe) articleId: number,
+    @Param('reactionId', ParseIntPipe) reactionId: number,
   ) {
     const userId = req.user.userId;
     await this.authValidator.userIdShouldExist(userId);
@@ -115,7 +139,7 @@ export class ArticleController {
   @Delete(':articleId/reaction')
   async removeReaction(
     @Req() req: { user: jwtPayload },
-    @Param('articleId') articleId: number,
+    @Param('articleId', ParseIntPipe) articleId: number,
   ) {
     const userId = req.user.userId;
     await this.authValidator.userIdShouldExist(userId);
@@ -126,7 +150,6 @@ export class ArticleController {
   }
 
   @Post(':id/report')
-  @UseGuards(JwtAuthGuard)
   async reportArticle(
     @Param('id', ParseIntPipe) articleId: number,
     @Req() req,

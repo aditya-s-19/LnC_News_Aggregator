@@ -1,7 +1,10 @@
 import {
   ConflictException,
+  forwardRef,
+  Inject,
   Injectable,
   Logger,
+  NotFoundException,
   OnModuleInit,
 } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
@@ -11,10 +14,14 @@ import { TheNewsApiAdapter } from 'src/adapters/the-news-api.adapter';
 import axios from 'axios';
 import { apiName } from 'src/utils/enums/api-name.enum';
 import { NewsAdapter } from 'src/interfaces/news-adapter.interface';
-import { ArticleResponseDto } from './dtos/article-response.dto';
+import {
+  GetArticleByIdResponseDto,
+  GetArticlesResponseDto,
+} from './dtos/article-response.dto';
 import { EmailService } from '../email/email.service';
 import { ArticleValidator } from './article.validator';
 import { Article } from '@prisma/client';
+import { NotificationService } from '../notification/notification.service';
 
 @Injectable()
 export class ArticleService implements OnModuleInit {
@@ -27,6 +34,8 @@ export class ArticleService implements OnModuleInit {
     private theNewsApiAdapter: TheNewsApiAdapter,
     private emailService: EmailService,
     private articleValidator: ArticleValidator,
+    @Inject(forwardRef(() => NotificationService))
+    private notificationService: NotificationService,
   ) {
     this.adapterMap = {
       [apiName.NEWS_API]: this.newsApiAdapter,
@@ -162,7 +171,7 @@ export class ArticleService implements OnModuleInit {
       orderBy: 'published_at' | 'like_count' | 'dislike_count';
       orderDirection: 'asc' | 'desc';
     },
-  ): Promise<ArticleResponseDto[]> {
+  ): Promise<GetArticlesResponseDto[]> {
     const where: any = {};
 
     if (filter.from || filter.to) {
@@ -214,16 +223,46 @@ export class ArticleService implements OnModuleInit {
         id: article.id,
         headline: article.headline,
         description: article.description,
-        source: article.source,
-        url: article.url,
-        published_at: article.published_at,
-        category_id: article.category_id,
-        isSaved: article.savedBy.length > 0,
-        reaction_id: article.reactions[0]?.reaction_id ?? null,
       }));
   }
 
-  async getSavedArticles(userId: number): Promise<ArticleResponseDto[]> {
+  async getDetailedArticle(
+    userId: number,
+    articleId: number,
+  ): Promise<GetArticleByIdResponseDto> {
+    const article = await this.prisma.article.findUnique({
+      where: { id: articleId },
+      include: {
+        savedBy: { where: { user_id: userId }, select: { id: true } },
+        reactions: {
+          where: { user_id: userId },
+          select: { reaction_id: true },
+        },
+      },
+    });
+
+    if (!article) throw new NotFoundException('Article not found');
+
+    await this.prisma.userReadArticle.upsert({
+      where: { user_id_article_id: { user_id: userId, article_id: articleId } },
+      update: { read_at: new Date() },
+      create: { user_id: userId, article_id: articleId },
+    });
+
+    return {
+      id: article.id,
+      headline: article.headline,
+      description: article.description,
+      source: article.source,
+      url: article.url,
+      published_at: article.published_at,
+      category_id: article.category_id,
+      isSaved: article.savedBy.length > 0,
+      reaction_id: article.reactions[0]?.reaction_id ?? null,
+    };
+  }
+
+  async getSavedArticles(userId: number): Promise<GetArticlesResponseDto[]> {
     const savedArticles = await this.prisma.userSavedArticle.findMany({
       where: { user_id: userId },
       include: {
@@ -258,12 +297,6 @@ export class ArticleService implements OnModuleInit {
         id: article.id,
         headline: article.headline,
         description: article.description,
-        source: article.source,
-        url: article.url,
-        published_at: article.published_at,
-        category_id: article.category_id,
-        isSaved: true,
-        reaction_id: article.reactions[0]?.reaction_id ?? null,
       }));
   }
 
@@ -561,5 +594,85 @@ export class ArticleService implements OnModuleInit {
         data: updates,
       });
     }
+  }
+
+  async getRecommendations(userId: number): Promise<Article[]> {
+    const [settings, likes, reads, dislikes] = await Promise.all([
+      this.notificationService.getUserSettings(userId),
+      this.prisma.userArticleReaction.findMany({
+        where: { user_id: userId, reaction: { name: 'like' } },
+        include: { article: true },
+      }),
+      this.prisma.userReadArticle.findMany({
+        where: { user_id: userId },
+        include: { article: true },
+      }),
+      this.prisma.userArticleReaction.findMany({
+        where: { user_id: userId, reaction: { name: 'dislike' } },
+        include: { article: true },
+      }),
+    ]);
+
+    // Count category occurrences
+    const categoryCount = (
+      items: { article: { category_id: number | null } }[],
+    ) => items.map((i) => i.article.category_id).filter(Boolean) as number[];
+
+    const mostLiked = this.getTopCategory(categoryCount(likes));
+    const mostRead = this.getTopCategory(categoryCount(reads));
+    const mostDisliked = this.getTopCategory(categoryCount(dislikes));
+
+    const categoryKeywordMap = new Map<number, string[]>();
+    for (const s of Object.values(settings)) {
+      if (!s.isEnabled) continue;
+      categoryKeywordMap.set(s.id, s.keywords ?? []);
+    }
+    if (mostLiked && !categoryKeywordMap.has(mostLiked)) {
+      categoryKeywordMap.set(mostLiked, []);
+    }
+    if (mostRead && !categoryKeywordMap.has(mostRead)) {
+      categoryKeywordMap.set(mostRead, []);
+    }
+    if (mostDisliked) categoryKeywordMap.delete(mostDisliked);
+
+    const orConditions: any[] = [];
+    for (const [catId, keywords] of categoryKeywordMap.entries()) {
+      if (!keywords.length) {
+        orConditions.push({ category_id: catId });
+      } else {
+        for (const keyword of keywords) {
+          orConditions.push({
+            category_id: catId,
+            description: { contains: keyword, mode: 'insensitive' },
+          });
+        }
+      }
+    }
+
+    const articles = await this.prisma.article.findMany({
+      where: {
+        published_at: { gte: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) },
+        OR: orConditions,
+        isHidden: false,
+      },
+      orderBy: { like_count: 'desc' },
+      take: 50,
+    });
+
+    const filteredArticles = await this.filterOutCensoredArticles(
+      userId,
+      articles,
+    );
+
+    return articles.filter((article) =>
+      filteredArticles.find((safeArticle) => safeArticle.id === article.id),
+    );
+  }
+
+  private getTopCategory(ids: number[]): number | null {
+    if (!ids.length) return null;
+    const freq = new Map<number, number>();
+    for (const id of ids) freq.set(id, (freq.get(id) ?? 0) + 1);
+    return [...freq.entries()].sort((a, b) => b[1] - a[1])[0][0];
   }
 }

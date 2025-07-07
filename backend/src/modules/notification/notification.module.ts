@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { forwardRef, Module } from '@nestjs/common';
 import { NotificationService } from './notification.service';
 import { PrismaModule } from 'src/prisma/prisma.module';
 import { AuthModule } from '../auth/auth.module';
@@ -7,9 +7,9 @@ import { NotificationValidator } from './notification.validator';
 import { ArticleModule } from '../article/article.module';
 
 @Module({
-  imports: [PrismaModule, AuthModule, ArticleModule],
+  imports: [PrismaModule, AuthModule, forwardRef(() => ArticleModule)],
   controllers: [NotificationController],
   providers: [NotificationService, NotificationValidator],
-  exports: [NotificationService], // ✅ must export it
+  exports: [NotificationService],
 })
 export class NotificationModule {}

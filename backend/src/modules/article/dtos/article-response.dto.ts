@@ -1,4 +1,4 @@
-export class ArticleResponseDto {
+export class GetArticleByIdResponseDto {
   id: number;
   headline: string;
   description: string;
@@ -8,4 +8,10 @@ export class ArticleResponseDto {
   category_id: number | null;
   isSaved: boolean;
   reaction_id: number | null;
+}
+
+export class GetArticlesResponseDto {
+  id: number;
+  headline: string;
+  description: string;
 }

@@ -50,8 +50,8 @@ export class ArticleValidator {
     if (category_id) {
       const n = Number(category_id);
       if (isNaN(n)) throw new BadRequestException('Invalid param: category_id');
-      await this.categoryIdShouldExist(Number(category_id));
-      await this.categoryIdShouldNotBeHidden(Number(category_id));
+      // await this.categoryIdShouldExist(Number(category_id));
+      // await this.categoryIdShouldNotBeHidden(Number(category_id));
       catId = n;
     }
 

@@ -25,13 +25,9 @@ export async function viewNotificationsPage(): Promise<void> {
       console.log("✅ You're all caught up! No new articles since last check.");
     } else {
       articles.forEach((a: any, index: number) => {
-        console.log(`\n📰 Article ${index + 1}`);
+        console.log(`\nId           : ${a.id}`);
         console.log(`Headline     : ${a.headline}`);
-        console.log(`Category     : ${catMap.get(a.category_id)}`);
-        console.log(`Published At : ${new Date(a.published_at).toLocaleString()}`);
         console.log(`Description  : ${a.description}`);
-        console.log(`Source       : ${a.source}`);
-        console.log(`URL          : ${a.url}`);
         console.log("-----------------------------------------------------");
       });
     }

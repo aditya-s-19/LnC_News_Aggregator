@@ -76,15 +76,9 @@ export async function searchArticlesPage(): Promise<void> {
     }
 
     articles.forEach((a: any, index: number) => {
-      console.log(`\n📰 Article ${index + 1}`);
-      console.log(`ID           : ${a.id}`);
+      console.log(`\nID           : ${a.id}`);
       console.log(`Headline     : ${a.headline}`);
       console.log(`Description  : ${a.description}`);
-      console.log(`Source       : ${a.source}`);
-      console.log(`Published At : ${new Date(a.published_at).toLocaleString()}`);
-      console.log(`URL          : ${a.url}`);
-      console.log(`Saved        : ${a.isSaved ? "✅ Yes" : "❌ No"}`);
-      console.log(`Reaction     : ${a.reaction_id ?? "None"}`);
       console.log("--------------------------------------------------------");
     });
 

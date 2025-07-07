@@ -16,6 +16,8 @@ export enum PagesName {
 
   //user menu
   USER_MENU = "User Menu",
+  VIEW_ARTICLE_DETAILS = "View Article Details",
+  VIEW_RECOMMENDATIONS = "View Recommendations",
   SEARCH_ARTICLES = "Search Articles",
   VIEW_SAVED_ARTICLES = "View Saved Articles",
   SAVE_ARTICLE = "Save Article",
